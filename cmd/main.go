@@ -12,7 +12,7 @@ import (
 
 var (
 	lastServedIndex = 0
-	serverList      = make(map[string][]string)
+	serverList      = make(map[string][]*httputil.ReverseProxy)
 )
 
 func main() {
@@ -26,7 +26,11 @@ func main() {
 	// populate serverList using conf data
 	for _, service := range conf.Microservices {
 		for _, property := range service.Service {
-			serverList[property.ApiPrefix] = property.Servers
+			for _, u := range property.Servers {
+				// create and store the reverse proxy for each url
+				serverList[property.ApiPrefix] =
+					append(serverList[property.ApiPrefix], createReverseProxy(u))
+			}
 		}
 	}
 
@@ -41,18 +45,18 @@ func forwardRequests(res http.ResponseWriter, req *http.Request) {
 	// get the api prefix
 	serviceName := strings.Split(req.URL.Path, "/")
 
-	url := getServer(serviceName[1])
-	rProxy := httputil.NewSingleHostReverseProxy(url)
+	rProxy := getServer(serviceName[1])
 	rProxy.ServeHTTP(res, req)
 }
 
-func getServer(name string) *url.URL {
-	nextIndex := (lastServedIndex + 1) % 2
-
-	fmt.Println(serverList[name])
-	fmt.Println(serverList[name][lastServedIndex])
-
-	url, _ := url.Parse(serverList[name][lastServedIndex])
+func getServer(name string) *httputil.ReverseProxy {
+	nextIndex := (lastServedIndex + 1) % len(serverList[name])
+	server := serverList[name][lastServedIndex]
 	lastServedIndex = nextIndex
-	return url
+	return server
+}
+
+func createReverseProxy(urlString string) *httputil.ReverseProxy {
+	u, _ := url.Parse(urlString)
+	return httputil.NewSingleHostReverseProxy(u)
 }
