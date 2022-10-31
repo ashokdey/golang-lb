@@ -10,9 +10,21 @@ import (
 	"strings"
 )
 
+type Microservices struct {
+	Name    string
+	Servers []ServiceRProxy
+}
+
+type ServiceRProxy struct {
+	RProxy      *httputil.ReverseProxy
+	Healthy     bool
+	HealthRoute *url.URL
+	Url         *url.URL
+}
+
 var (
 	lastServedIndex = 0
-	serverList      = make(map[string][]*httputil.ReverseProxy)
+	serverList      = make(map[string]Microservices)
 )
 
 func main() {
@@ -26,11 +38,22 @@ func main() {
 	// populate serverList using conf data
 	for _, service := range conf.Microservices {
 		for _, property := range service.Service {
-			for _, u := range property.Servers {
-				// create and store the reverse proxy for each url
-				serverList[property.ApiPrefix] =
-					append(serverList[property.ApiPrefix], createReverseProxy(u))
+			ms := Microservices{
+				Name:    property.Name,
+				Servers: []ServiceRProxy{},
 			}
+			for _, urlStr := range property.Servers {
+				// create and store the reverse proxy for each url
+				u, _ := url.Parse(urlStr)
+				healthUrl, _ := url.Parse(urlStr + property.HealthRoute)
+				ms.Servers = append(ms.Servers, ServiceRProxy{
+					RProxy:      createReverseProxy(u),
+					Healthy:     true,
+					Url:         u,
+					HealthRoute: healthUrl,
+				})
+			}
+			serverList[property.ApiPrefix] = ms
 		}
 	}
 
@@ -50,13 +73,12 @@ func forwardRequests(res http.ResponseWriter, req *http.Request) {
 }
 
 func getServer(name string) *httputil.ReverseProxy {
-	nextIndex := (lastServedIndex + 1) % len(serverList[name])
-	server := serverList[name][lastServedIndex]
+	nextIndex := (lastServedIndex + 1) % len(serverList[name].Servers)
+	server := serverList[name].Servers[lastServedIndex]
 	lastServedIndex = nextIndex
-	return server
+	return server.RProxy
 }
 
-func createReverseProxy(urlString string) *httputil.ReverseProxy {
-	u, _ := url.Parse(urlString)
-	return httputil.NewSingleHostReverseProxy(u)
+func createReverseProxy(url *url.URL) *httputil.ReverseProxy {
+	return httputil.NewSingleHostReverseProxy(url)
 }

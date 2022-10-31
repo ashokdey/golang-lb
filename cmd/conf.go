@@ -16,10 +16,11 @@ type YamlConfServices struct {
 }
 
 type YamlConfServicesServiceProperties struct {
-	Name      string   `yaml:"name"`
-	Servers   []string `yaml:"servers"`
-	Version   string   `yaml:"version"`
-	ApiPrefix string   `yaml:"apiPrefix"`
+	Name        string   `yaml:"name"`
+	Servers     []string `yaml:"servers"`
+	Version     string   `yaml:"version"`
+	ApiPrefix   string   `yaml:"apiPrefix"`
+	HealthRoute string   `yaml:"healthRoute"`
 }
 
 func readConfFile(filename string) (*YamlConf, error) {

@@ -8,6 +8,7 @@ microservices:
         ]
         version: 1.0
         apiPrefix: users-api
+        healthRoute: "/health"
 
   - service:
       properties:
@@ -18,3 +19,4 @@ microservices:
         ]
         version: 1.0
         apiPrefix: auth-api
+        healthRoute: "/health"
