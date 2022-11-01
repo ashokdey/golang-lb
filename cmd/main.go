@@ -1,26 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"path/filepath"
 	"strings"
 )
-
-type Microservices struct {
-	Name    string
-	Servers []ServiceRProxy
-}
-
-type ServiceRProxy struct {
-	RProxy      *httputil.ReverseProxy
-	Healthy     bool
-	HealthRoute *url.URL
-	Url         *url.URL
-}
 
 var (
 	lastServedIndex = 0
@@ -28,36 +14,14 @@ var (
 )
 
 func main() {
-	fileName, _ := filepath.Abs("conf.yml")
-	conf, err := readConfFile(fileName)
+	err := populateMicroservices("conf.yml")
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		log.Fatal(err.Error())
 	}
+	fmt.Println("Populated config")
 
-	// populate serverList using conf data
-	for _, service := range conf.Microservices {
-		for _, property := range service.Service {
-			ms := Microservices{
-				Name:    property.Name,
-				Servers: []ServiceRProxy{},
-			}
-			for _, urlStr := range property.Servers {
-				// create and store the reverse proxy for each url
-				u, _ := url.Parse(urlStr)
-				healthUrl, _ := url.Parse(urlStr + property.HealthRoute)
-				ms.Servers = append(ms.Servers, ServiceRProxy{
-					RProxy:      createReverseProxy(u),
-					Healthy:     true,
-					Url:         u,
-					HealthRoute: healthUrl,
-				})
-			}
-			serverList[property.ApiPrefix] = ms
-		}
-	}
-
-	fmt.Println(serverList)
+	go checkServers()
+	fmt.Println("Started CRON")
 
 	http.HandleFunc("/", forwardRequests)
 	log.Fatal(http.ListenAndServe(":9000", nil))
@@ -67,18 +31,37 @@ func main() {
 func forwardRequests(res http.ResponseWriter, req *http.Request) {
 	// get the api prefix
 	serviceName := strings.Split(req.URL.Path, "/")
+	server, err := getHealthyServer(serviceName[1])
 
-	rProxy := getServer(serviceName[1])
-	rProxy.ServeHTTP(res, req)
+	// fmt.Println("Server value ", server)
+	if err != nil {
+		res.Write([]byte(err.Error()))
+		return
+	}
+
+	if server.Healthy {
+		server.RProxy.ServeHTTP(res, req)
+	} else {
+		log.Println("Server not healthy returning error")
+		res.Write([]byte(err.Error()))
+		return
+	}
 }
 
-func getServer(name string) *httputil.ReverseProxy {
+func getHealthyServer(name string) (Server, error) {
+	for i := 0; i < len(serverList[name].Servers); i++ {
+		server := getServer(name)
+		if server.Healthy {
+			// log.Printf("Serving from : %s", server.Url)
+			return server, nil
+		}
+	}
+	return Server{}, errors.New("all servers are down")
+}
+
+func getServer(name string) Server {
 	nextIndex := (lastServedIndex + 1) % len(serverList[name].Servers)
 	server := serverList[name].Servers[lastServedIndex]
 	lastServedIndex = nextIndex
-	return server.RProxy
-}
-
-func createReverseProxy(url *url.URL) *httputil.ReverseProxy {
-	return httputil.NewSingleHostReverseProxy(url)
+	return server
 }

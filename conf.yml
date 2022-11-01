@@ -5,10 +5,12 @@ microservices:
         servers: [
           "http://127.0.0.1:4000",
           "http://127.0.0.1:4001",
+          "http://127.0.0.1:4002",
+          "http://127.0.0.1:4003",
         ]
         version: 1.0
         apiPrefix: users-api
-        healthRoute: "/health"
+        healthRoute: "/"
 
   - service:
       properties:
@@ -19,4 +21,4 @@ microservices:
         ]
         version: 1.0
         apiPrefix: auth-api
-        healthRoute: "/health"
+        healthRoute: "/"

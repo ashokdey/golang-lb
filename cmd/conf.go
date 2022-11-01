@@ -38,6 +38,5 @@ func readConfFile(filename string) (*YamlConf, error) {
 	if err != nil {
 		return nil, fmt.Errorf("in file %q: %w", filename, err)
 	}
-
 	return c, err
 }
